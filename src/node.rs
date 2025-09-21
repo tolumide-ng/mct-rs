@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::rc::{Rc, Weak};
 
 pub(crate) struct Node<S, A, R> {
     /// Records the unique node id to distinguish duplicated state
@@ -6,25 +6,24 @@ pub(crate) struct Node<S, A, R> {
     /// Records the number of times this state has been visited
     visits: u16,
     state: S,
-    action: A,
-    reward: R,
-    parent: Weak<Arc<Node<S, A, R>>>,
+    action: Option<A>,
+    reward: Option<R>,
+    parent: Weak<Rc<Node<S, A, R>>>,
 }
 
 impl<S, A, R> Node<S, A, R> {
     pub(crate) fn new(
         id: u16,
         state: S,
-        action: A,
-        reward: R,
-        parent: Weak<Arc<Node<S, A, R>>>,
+        action: Option<A>,
+        parent: Weak<Rc<Node<S, A, R>>>,
     ) -> Self {
         Self {
             id,
             visits: 0,
             state,
             action,
-            reward,
+            reward: None,
             parent,
         }
     }
