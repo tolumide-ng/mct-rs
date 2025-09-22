@@ -2,10 +2,12 @@ use std::{rc::Weak, time::Instant};
 
 use crate::{action::Action, mdp::MDP, node::Node};
 
-pub struct MCTS<S: MDP<S, A, R>, A, R>
+pub struct MCTS<M, S, A, R>
 where
+    M: MDP<S, A, R>,
     A: Action,
 {
+    mdp: M,
     root: Node<S, A, R>,
     next_id: u16,
     /// After how many milliseconds, the mcts should timeout
@@ -13,15 +15,13 @@ where
     timeout: u128,
 }
 
-impl<S: MDP<S, A, R>, A, R> MCTS<S, A, R>
-where
-    A: Action,
-{
-    pub fn new(state: S, timeout: u128) -> Self {
-        let next_id = 0;
+impl<M: MDP<S, A, R>, S, A: Action, R> MCTS<M, S, A, R> {
+    pub fn new(mdp: M, timeout: u128) -> Self {
+        let state = mdp.get_initial_state();
         Self {
-            root: Node::new(next_id, state, None, Weak::new()),
-            next_id: next_id + 1,
+            root: Node::new(0, state, None, Weak::new()),
+            mdp,
+            next_id: 1,
             timeout,
         }
     }
@@ -32,8 +32,8 @@ where
 
         while start_time.elapsed().as_millis() < self.timeout {
             let selected_node = self.root.select();
-            if !selected_node.state.is_terminal() {
-                let child = selected_node.expand();
+            if !self.mdp.is_terminal(&selected_node.state) {
+                let child = selected_node.expand(&self.mdp);
                 let reward = child.simulate();
                 child.back_propagate(reward);
             }
