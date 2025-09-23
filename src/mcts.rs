@@ -12,6 +12,8 @@ where
     M: MDP<S, A, R>,
     A: Action,
     B: MultiArmedBandit<S, A, R> + Default,
+    S: Clone,
+    R: Clone,
 {
     mdp: M,
     root: Node<S, A, R>,
@@ -27,6 +29,8 @@ where
     M: MDP<S, A, R>,
     A: Action,
     B: MultiArmedBandit<S, A, R> + Default,
+    S: Clone,
+    R: Clone,
 {
     pub fn new(mdp: M, bandit: Option<B>, timeout: u128) -> Self {
         let state = mdp.get_initial_state();
@@ -44,12 +48,12 @@ where
         let start_time = Instant::now();
 
         while start_time.elapsed().as_millis() < self.timeout {
-            let selected_node = self.bandit.select();
-            if !self.mdp.is_terminal(&selected_node.state) {
-                let child = selected_node.expand(&self.mdp);
-                let reward = child.simulate();
-                child.back_propagate(reward);
-            }
+            // let selected_node = self.bandit.select(&self.);
+            // if !self.mdp.is_terminal(&selected_node.state) {
+            //     let child = selected_node.expand(&self.mdp);
+            //     let reward = child.simulate();
+            //     child.back_propagate(reward);
+            // }
         }
     }
 }

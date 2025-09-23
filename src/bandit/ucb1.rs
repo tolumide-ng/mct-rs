@@ -17,12 +17,14 @@ pub struct UCB1;
 impl<S, A, R> MultiArmedBandit<S, A, R> for UCB1
 where
     A: Action,
+    S: Clone,
+    R: Clone,
 {
     fn q_function(&self, state: &Node<S, A, R>, action: A) -> f64 {
         todo!()
     }
 
-    fn select(&self, node: Node<S, A, R>, actions: Vec<A>) -> A {
+    fn select(&self, node: &Node<S, A, R>, actions: Vec<A>) -> A {
         if let Some(untried) = actions
             .iter()
             .find(|&action| !node.children.iter().any(|c| c.0.action == Some(*action)))

@@ -3,10 +3,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{action::Action, mdp::MDP, rand};
+use crate::{action::Action, bandit::selector::MultiArmedBandit, mdp::MDP, rand};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Node<S, A, R> {
+pub struct Node<S, A, R>
+where
+    S: Clone,
+    R: Clone,
+{
     /// Records the unique node id to distinguish duplicated state
     id: u16,
     /// Records the number of times this state has been visited
@@ -23,7 +27,11 @@ pub(crate) struct Node<S, A, R> {
     pub(crate) children: Vec<Rc<(Node<S, A, R>, usize)>>,
 }
 
-impl<S, A: Action, R> Node<S, A, R> {
+impl<S, A: Action, R> Node<S, A, R>
+where
+    S: Clone,
+    R: Clone,
+{
     pub(crate) fn new(
         id: u16,
         state: S,
@@ -41,11 +49,24 @@ impl<S, A: Action, R> Node<S, A, R> {
         }
     }
 
+    pub(crate) fn get_outcome_child(&self, action: A) -> Node<S, A, R> {
+        todo!()
+    }
+
     /// Select a node that is not fully expanded
-    pub(crate) fn select<M: MDP<S, A, R>>(&self, mdp: &M) {
+    pub(crate) fn select<M, B>(&self, mdp: &M, bandit: B) -> Node<S, A, R>
+    //  -> Rc<Node<S, A, R>>
+    where
+        M: MDP<S, A, R>,
+        B: MultiArmedBandit<S, A, R>,
+    {
         if !self.is_full_expanded(mdp) || mdp.is_terminal(&self.state) {
             // return Rc::clone(&self);
+            return self.clone();
         }
+        let actions = mdp.get_actions(&self.state);
+        let action = bandit.select(&self, actions);
+        return self.get_outcome_child(action).select(mdp, bandit);
 
         // Assuming this node is already fully expanded
         // (i.e. all it's children have been explored),
