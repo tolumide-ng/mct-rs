@@ -1,8 +1,6 @@
-use crate::multi_armed_bandits::ucb1::UpperConfidenceBounds;
-
 /// currently rethinking MDP to be implemented by State, i.e. making MDP itself state
 /// Markov Decision Processes
-pub trait MDP<S, A, R>: UpperConfidenceBounds {
+pub trait MDP<S, A, R> {
     /// Returns all states of this MDP
     fn get_states(&self) -> Vec<S>;
 

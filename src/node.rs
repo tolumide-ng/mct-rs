@@ -1,4 +1,7 @@
-use std::rc::{Rc, Weak};
+use std::{
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
 use crate::{action::Action, mdp::MDP, rand};
 
@@ -9,10 +12,15 @@ pub(crate) struct Node<S, A, R> {
     /// Records the number of times this state has been visited
     visits: u16,
     pub(crate) state: S,
-    action: Option<A>,
+    pub(crate) action: Option<A>,
     reward: Option<R>,
     parent: Weak<Rc<Node<S, A, R>>>,
-    children: Vec<Rc<Node<S, A, R>>>,
+    /// rather than storing stats(time visited for the bandit) in UCB1, we only store children and times visited here
+    /// In UCB1 where we need to explore all the actions first before we start exploiting
+    /// All we just do is compare total actions on this state with the total children (explored children of this node)
+    /// If they're the same, we've explored everything, else we haven't, and we just add the missing action(child)
+    /// Since each node has `action` we can easily use this to know which action/child has been checked or not
+    pub(crate) children: Vec<Rc<(Node<S, A, R>, usize)>>,
 }
 
 impl<S, A: Action, R> Node<S, A, R> {

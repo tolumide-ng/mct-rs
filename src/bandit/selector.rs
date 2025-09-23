@@ -1,11 +1,7 @@
-pub trait Selector<S, A> {
-    fn get(&self, state: S, action: A);
-}
+use crate::node::Node;
 
+pub trait MultiArmedBandit<S, A, R> {
+    fn q_function(&self, state: &Node<S, A, R>, action: A) -> f64;
 
-pub trait MultiArmedBandit<S, A, Q>
-where
-    Q: Selector<S, A>,
-{
-    fn select(&self, state: S, actions: Vec<A>, q_function: Q);
+    fn select(&self, state: Node<S, A, R>, actions: Vec<A>) -> A;
 }
