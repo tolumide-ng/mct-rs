@@ -1,4 +1,7 @@
-use std::{rc::Weak, time::Instant};
+use std::{
+    rc::{Rc, Weak},
+    time::Instant,
+};
 
 use crate::{
     action::Action,
@@ -16,7 +19,7 @@ where
     R: Clone,
 {
     mdp: M,
-    root: Node<S, A, R>,
+    root: Rc<Node<S, A, R>>,
     next_id: u16,
     /// After how many milliseconds, the mcts should timeout
     /// TODO: Move this to be more dynamic, and support max-depth timeout
@@ -35,7 +38,7 @@ where
     pub fn new(mdp: M, bandit: Option<B>, timeout: u128) -> Self {
         let state = mdp.get_initial_state();
         Self {
-            root: Node::new(0, state, None, Weak::new()),
+            root: Rc::new(Node::new(state, None, None, Weak::new())),
             mdp,
             next_id: 1,
             timeout,
@@ -48,12 +51,12 @@ where
         let start_time = Instant::now();
 
         while start_time.elapsed().as_millis() < self.timeout {
-            // let selected_node = self.bandit.select(&self.);
-            // if !self.mdp.is_terminal(&selected_node.state) {
-            //     let child = selected_node.expand(&self.mdp);
-            //     let reward = child.simulate();
-            //     child.back_propagate(reward);
-            // }
+            let selected_node = Rc::new(self.root.select(&self.mdp, &self.bandit));
+            if !self.mdp.is_terminal(&selected_node.state) {
+                let child = selected_node.expand(&self.mdp);
+                let reward = child.simulate();
+                // child.back_propagate(reward);
+            }
         }
     }
 }

@@ -17,7 +17,7 @@ pub struct UCB1;
 impl<S, A, R> MultiArmedBandit<S, A, R> for UCB1
 where
     A: Action,
-    S: Clone,
+    S: Eq + PartialEq,
     R: Clone,
 {
     fn q_function(&self, state: &Node<S, A, R>, action: A) -> f64 {
@@ -25,28 +25,34 @@ where
     }
 
     fn select(&self, node: &Node<S, A, R>, actions: Vec<A>) -> A {
-        if let Some(untried) = actions
-            .iter()
-            .find(|&action| !node.children.iter().any(|c| c.0.action == Some(*action)))
-        {
+        if let Some(untried) = actions.iter().find(|&action| {
+            !node
+                .children
+                .borrow()
+                .iter()
+                .any(|c| c.action == Some(*action))
+        }) {
             return *untried;
         }
 
         let mut max_actions: Vec<A> = Vec::with_capacity(actions.len());
         let mut max_value = f64::NEG_INFINITY;
-        let total = node.children.iter().map(|x| x.1).sum::<usize>() as f64;
+        let total = node
+            .children
+            .borrow()
+            .iter()
+            .map(|x| x.visits)
+            .sum::<usize>() as f64;
 
-        let children: Vec<&Rc<(Node<S, A, R>, usize)>> = node.children.iter().collect();
-
-        for child in children {
-            let value = self.q_function(&node, child.0.action.unwrap())
-                + f64::sqrt(2f64 * f64::log10(total)) / (child.1 as f64);
+        for child in node.children.borrow().iter() {
+            let value = self.q_function(&node, child.action.unwrap())
+                + f64::sqrt(2f64 * f64::log10(total)) / (child.visits as f64);
 
             if value > max_value {
-                max_actions = vec![child.0.action.unwrap()];
+                max_actions = vec![child.action.unwrap()];
                 max_value = value;
             } else {
-                max_actions.push(child.0.action.unwrap());
+                max_actions.push(child.action.unwrap());
             }
         }
 
