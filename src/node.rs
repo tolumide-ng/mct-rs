@@ -3,7 +3,12 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{action::Action, bandit::selector::MultiArmedBandit, mdp::MDP, rand};
+use crate::{
+    action::Action,
+    bandit::selector::MultiArmedBandit,
+    mdp::MDP,
+    rand::{self, genrand},
+};
 
 #[derive(Debug, Clone)]
 pub struct Node<S, A, R>
@@ -80,7 +85,7 @@ where
     }
 
     /// Select a node that is not fully expanded
-    pub(crate) fn select<M, B>(self: &Rc<Self>, mdp: &M, bandit: &B) -> Rc<Node<S, A, R>>
+    pub(crate) fn select<M, B>(self: &Rc<Self>, mdp: &M, bandit: &B) -> Rc<Self>
     //  -> Rc<Node<S, A, R>>
     where
         M: MDP<S, A, R>,
@@ -100,11 +105,29 @@ where
     }
 
     pub(crate) fn expand<M: MDP<S, A, R>>(self: &Rc<Self>, mdp: &M) -> Rc<Self> {
-        // let actions = mdp.get_actions(&self.state);
-        // if actions.is_empty() {
-        //     return Rc::clone(&self);
-        // }
-        todo!()
+        if mdp.is_terminal(&self.state) {
+            return Rc::clone(&self);
+        }
+
+        // Randomly select an unexpected action to expand
+        let actions = mdp.get_actions(&self.state);
+        let actions = actions
+            .iter()
+            .filter(|a| {
+                let already_executed = self
+                    .children
+                    .borrow()
+                    .iter()
+                    .any(|child| child.action.is_some_and(|ac| ac == **a));
+
+                return !already_executed;
+            })
+            .collect::<Vec<_>>();
+
+        let index = genrand(0, actions.len());
+        let action = actions[index];
+
+        return self.get_outcome_child(mdp, action);
     }
 
     pub(crate) fn simulate(&self) -> R {
