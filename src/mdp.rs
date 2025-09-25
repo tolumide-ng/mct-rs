@@ -2,7 +2,7 @@ use crate::rand::genrand;
 
 /// currently rethinking MDP to be implemented by State, i.e. making MDP itself state
 /// Markov Decision Processes
-pub trait MDP<S, A, R> {
+pub trait MDP<S, A> {
     /// Returns all states of this MDP
     fn get_states(&self) -> Vec<S>;
 
@@ -14,7 +14,7 @@ pub trait MDP<S, A, R> {
     fn get_transitions(&self, state: &S, action: &A) -> Vec<(S, f64)>;
 
     /// Returns the reward for transitioning from state to nextState via action
-    fn get_reward(&self, state: &S, action: &A, next_state: &S) -> R;
+    fn get_reward(&self, state: &S, action: &A, next_state: &S) -> f64;
 
     /// Returns true if and only if state is a terminal state of this MDP
     fn is_terminal(&self, state: &S) -> bool;
@@ -29,7 +29,7 @@ pub trait MDP<S, A, R> {
     fn get_goal_states(&self) -> Vec<S>;
 
     /// Returns the new state after the application of the provided action on it, and the reward/outcome of such move(application)
-    fn execute(&self, state: &S, action: &A) -> (S, R, bool) {
+    fn execute(&self, state: &S, action: &A) -> (S, f64, bool) {
         let mut transitions = self.get_transitions(state, &action);
         assert!(!transitions.is_empty(), "No transitions for this action");
 

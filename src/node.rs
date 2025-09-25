@@ -5,46 +5,42 @@ use std::{
 
 use crate::{
     action::Action,
-    bandit::selector::MultiArmedBandit,
     mdp::MDP,
-    rand::{self, genrand},
+    rand::{genrand, get_id},
+    ucb1::UCB1,
 };
 
 #[derive(Debug, Clone)]
-pub struct Node<S, A, R>
-where
-    R: Clone,
-{
+pub struct Node<S, A> {
     /// Records the unique node id to distinguish duplicated state
     // id: u16,
     /// Records the number of times this node has been visited
-    pub(crate) visits: usize,
+    pub(crate) visits: RefCell<usize>,
     pub(crate) state: S,
+    pub(crate) id: u64,
     /// The action that resulted in this Node(State)
     pub(crate) action: Option<A>,
-    reward: Option<R>,
-    parent: Weak<Node<S, A, R>>,
+    reward: Option<f64>,
+    parent: Weak<Node<S, A>>,
     /// rather than storing stats(time visited for the bandit) in UCB1, we only store children and times visited here
     /// In UCB1 where we need to explore all the actions first before we start exploiting
     /// All we just do is compare total actions on this state with the total children (explored children of this node)
     /// If they're the same, we've explored everything, else we haven't, and we just add the missing action(child)
     /// Since each node has `action` we can easily use this to know which action/child has been checked or not
-    pub(crate) children: RefCell<Vec<Rc<Node<S, A, R>>>>,
+    pub(crate) children: RefCell<Vec<Rc<Node<S, A>>>>,
 }
 
-impl<S, A: Action, R> Node<S, A, R>
-where
-    R: Clone,
-{
+impl<S, A: Action> Node<S, A> {
     pub(crate) fn new(
         state: S,
+        id: u64,
         action: Option<A>,
-        reward: Option<R>,
-        parent: Weak<Node<S, A, R>>,
+        reward: Option<f64>,
+        parent: Weak<Node<S, A>>,
     ) -> Self {
         Self {
-            // id,
-            visits: 0,
+            id,
+            visits: RefCell::new(0),
             state,
             action,
             reward,
@@ -54,9 +50,9 @@ where
     }
 
     /// Simulate the outcome of an action, and return the child node
-    pub(crate) fn get_outcome_child<M>(self: &Rc<Self>, mdp: &M, action: &A) -> Rc<Node<S, A, R>>
+    pub(crate) fn get_outcome_child<M>(self: &Rc<Self>, mdp: &M, action: &A) -> Rc<Node<S, A>>
     where
-        M: MDP<S, A, R>,
+        M: MDP<S, A>,
     {
         // Chose one outcome based on transition probabilities
         let (next_state, reward, _) = mdp.execute(&self.state, action);
@@ -74,6 +70,7 @@ where
         // This outcome has not occured from this state-action pair previously
         let new_child = Rc::new(Node::new(
             next_state,
+            get_id(),
             Some(*action),
             Some(reward),
             Rc::downgrade(self),
@@ -85,11 +82,10 @@ where
     }
 
     /// Select a node that is not fully expanded
-    pub(crate) fn select<M, B>(self: &Rc<Self>, mdp: &M, bandit: &B) -> Rc<Self>
+    pub(crate) fn select<M>(self: &Rc<Self>, mdp: &M, bandit: &UCB1) -> Rc<Self>
     //  -> Rc<Node<S, A, R>>
     where
-        M: MDP<S, A, R>,
-        B: MultiArmedBandit<S, A, R>,
+        M: MDP<S, A>,
     {
         if !self.is_full_expanded(mdp) || mdp.is_terminal(&self.state) {
             return Rc::clone(&self);
@@ -104,7 +100,7 @@ where
         return self.get_outcome_child(mdp, &action).select(mdp, bandit);
     }
 
-    pub(crate) fn expand<M: MDP<S, A, R>>(self: &Rc<Self>, mdp: &M) -> Rc<Self> {
+    pub(crate) fn expand<M: MDP<S, A>>(self: &Rc<Self>, mdp: &M) -> Rc<Self> {
         if mdp.is_terminal(&self.state) {
             return Rc::clone(&self);
         }
@@ -126,39 +122,25 @@ where
 
         let index = genrand(0, actions.len());
         let action = actions[index];
-
         return self.get_outcome_child(mdp, action);
     }
 
-    pub(crate) fn simulate(&self) -> R {
-        todo!()
-    }
-
     /// BackPropagate the reward back to the parent node
-    pub(crate) fn back_propagate(&self, reward: R) {}
+    pub(crate) fn back_propagate(self: &Rc<Self>, reward: f64, q_function: &mut UCB1) {
+        *self.visits.borrow_mut() += 1;
 
-    /// Return the value of this node
-    pub(crate) fn get_value(&self) {
-        // max_q_value = self.qfunction.get_max_q(
-        //     self.state, self.mdp.get_actions(self.state)
-        // )
-        // return max_q_value
-    }
+        let qvalue = q_function.get_q_value(&self.id);
+        let delta = (1f64 / *self.visits.borrow() as f64) * (reward - qvalue);
+        q_function.update(&self, delta);
 
-    fn choose(&self, actions: Vec<A>) -> A {
-        if actions.len() == 1 {
-            return actions[0];
+        if let Some(parent) = self.parent.upgrade() {
+            let sreward = self.reward.as_ref().map_or(0f64, |r| *r);
+            parent.back_propagate(reward + sreward, q_function);
         }
-
-        let index = rand::genrand(0, actions.len());
-        return actions[index];
     }
 
     /// Returns true if and only if all child actions have been expanded
-    fn is_full_expanded<M: MDP<S, A, R>>(&self, mdp: &M) -> bool {
+    fn is_full_expanded<M: MDP<S, A>>(&self, mdp: &M) -> bool {
         mdp.get_actions(&self.state).len() == self.children.borrow().len()
     }
 }
-
-// Needs to implement QFunction
-// Needs to implement Bandit

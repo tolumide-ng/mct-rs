@@ -1,8 +1,7 @@
 use core::f64;
-use std::rc::Rc;
+use std::collections::HashMap;
 
 use crate::action::Action;
-use crate::bandit::selector::MultiArmedBandit;
 use crate::node::Node;
 use crate::rand::genrand;
 
@@ -12,19 +11,28 @@ use crate::rand::genrand;
 /// this can be: Softmax strategy, UCB1 e.t.c
 
 #[derive(Debug, Default)]
-pub struct UCB1;
+pub struct UCB1 {
+    // TODO: Readup/watch videos on Qfunctions
+    q_table: HashMap<u64, f64>,
+}
 
-impl<S, A, R> MultiArmedBandit<S, A, R> for UCB1
-where
-    A: Action,
-    S: Eq + PartialEq,
-    R: Clone,
-{
-    fn q_function(&self, state: &Node<S, A, R>, action: A) -> f64 {
-        todo!()
+impl UCB1 {
+    pub(crate) fn get_q_value(&self, id: &u64) -> f64 {
+        *self.q_table.get(id).unwrap_or(&0.0)
     }
 
-    fn select(&self, node: &Node<S, A, R>, actions: Vec<A>) -> A {
+    pub(crate) fn update<S, A>(&mut self, state: &Node<S, A>, delta: f64)
+    where
+        A: Action,
+    {
+        let entry = self.q_table.entry(state.id).or_insert(0.0);
+        *entry += delta
+    }
+
+    pub(crate) fn select<S, A>(&self, node: &Node<S, A>, actions: Vec<A>) -> A
+    where
+        A: Action,
+    {
         if let Some(untried) = actions.iter().find(|&action| {
             !node
                 .children
@@ -41,12 +49,12 @@ where
             .children
             .borrow()
             .iter()
-            .map(|x| x.visits)
+            .map(|x| *x.visits.borrow())
             .sum::<usize>() as f64;
 
         for child in node.children.borrow().iter() {
-            let value = self.q_function(&node, child.action.unwrap())
-                + f64::sqrt(2f64 * f64::log10(total)) / (child.visits as f64);
+            let value = self.get_q_value(&node.id)
+                + f64::sqrt(2f64 * f64::log10(total)) / (*child.visits.borrow() as f64);
 
             if value > max_value {
                 max_actions = vec![child.action.unwrap()];
@@ -59,11 +67,5 @@ where
         // If there are multiple actions with the highest value, choose one randomly
         let index = genrand(0, max_actions.len());
         return max_actions[index];
-    }
-}
-
-impl UCB1 {
-    pub fn new() -> Self {
-        Self
     }
 }

@@ -3,4 +3,6 @@ use std::{
     hash::Hash,
 };
 
-pub trait Action: Debug + Eq + PartialEq + Clone + Copy + Display + Eq + PartialEq {}
+pub trait Action: Debug + Eq + PartialEq + Clone + Copy + Display + Hash {
+    // type Reward;
+}
