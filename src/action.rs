@@ -1,8 +1,3 @@
-use std::{
-    fmt::{Debug, Display},
-    hash::Hash,
-};
+use std::fmt::Debug;
 
-pub trait Action: Debug + Eq + PartialEq + Clone + Copy + Display + Hash {
-    // type Reward;
-}
+pub trait Action: Debug + Eq + PartialEq + Clone + Copy {}

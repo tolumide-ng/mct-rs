@@ -9,15 +9,14 @@ use crate::rand::genrand;
 /// This method helps us calculate the best child of this node to exploit further
 /// Selects an action for the state from a list given a Q-function(???) (https://gibberblot.github.io/rl-notes/single-agent/multi-armed-bandits.html#id5)
 /// this can be: Softmax strategy, UCB1 e.t.c
-
 #[derive(Debug, Default)]
 pub struct UCB1 {
     // TODO: Readup/watch videos on Qfunctions
-    q_table: HashMap<u64, f64>,
+    q_table: HashMap<usize, f64>,
 }
 
 impl UCB1 {
-    pub(crate) fn get_q_value(&self, id: &u64) -> f64 {
+    pub(crate) fn get_q_value(&self, id: &usize) -> f64 {
         *self.q_table.get(id).unwrap_or(&0.0)
     }
 

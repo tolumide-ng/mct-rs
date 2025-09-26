@@ -15,10 +15,3 @@ pub(crate) fn genrand(min: usize, max: usize) -> usize {
         // else: retry
     }
 }
-
-/// TODO: Eventually replace with internally generated sequential ID (usize)
-pub(crate) fn get_id() -> u64 {
-    let mut buf = [0u8; 8];
-    getrandom(&mut buf).unwrap();
-    u64::from_le_bytes(buf)
-}

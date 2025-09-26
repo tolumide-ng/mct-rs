@@ -1,15 +1,10 @@
 use std::{
+    cell::RefCell,
     rc::{Rc, Weak},
     time::Instant,
 };
 
-use crate::{
-    action::Action,
-    mdp::MDP,
-    node::Node,
-    rand::{genrand, get_id},
-    ucb1::UCB1,
-};
+use crate::{action::Action, mdp::MDP, node::Node, rand::genrand, ucb1::UCB1};
 
 pub struct MCTS<M, S, A>
 where
@@ -19,10 +14,7 @@ where
 {
     mdp: M,
     root: Rc<Node<S, A>>,
-    // next_id: usize,
-    /// After how many milliseconds, the mcts should timeout
-    /// TODO: Move this to be more dynamic, and support max-depth timeout
-    timeout: u128,
+    next_id: RefCell<usize>,
     bandit: UCB1,
 }
 
@@ -32,25 +24,26 @@ where
     A: Action,
     S: Clone,
 {
-    pub fn new(mdp: M, timeout: u128) -> Self {
+    pub fn new(mdp: M) -> Self {
         let state = mdp.get_initial_state();
         Self {
-            root: Rc::new(Node::new(state, get_id(), None, None, Weak::new())),
+            root: Rc::new(Node::new(state, 0, None, None, Weak::new())),
+            next_id: RefCell::new(1),
             mdp,
-            // next_id: 1,
-            timeout,
             bandit: UCB1::default(),
         }
     }
 
     /// Execute the MCTS algorithm from the initial state given, with timeout in seconds
-    pub fn mcts(&mut self) {
+    /// After how many milliseconds, the mcts should timeout
+    /// TODO: Move this to be more dynamic, and support max-depth timeout
+    pub fn mcts(&mut self, timeout: u128) {
         let start_time = Instant::now();
 
-        while start_time.elapsed().as_millis() < self.timeout {
-            let selected_node = Rc::new(self.root.select(&self.mdp, &self.bandit));
+        while start_time.elapsed().as_millis() < timeout {
+            let selected_node = Rc::new(self.root.select(&self.mdp, &self.bandit, &self.next_id));
             if !self.mdp.is_terminal(&selected_node.state) {
-                let child = selected_node.expand(&self.mdp);
+                let child = selected_node.expand(&self.mdp, &self.next_id);
                 let reward = self.simulate(&child);
                 child.back_propagate(reward, &mut self.bandit);
             }
