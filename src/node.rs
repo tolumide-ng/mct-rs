@@ -44,6 +44,18 @@ impl<S, A: Action> Node<S, A> {
         }
     }
 
+    pub fn most_visited_child(&self) -> Option<Rc<Node<S, A>>> {
+        self.children
+            .borrow()
+            .iter()
+            .max_by_key(|c| *c.visits.borrow())
+            .map(Rc::clone)
+    }
+
+    pub fn visits(&self) -> usize {
+        *self.visits.borrow()
+    }
+
     /// Simulate the outcome of an action, and return the child node
     pub(crate) fn get_outcome_child<M>(
         self: &Rc<Self>,

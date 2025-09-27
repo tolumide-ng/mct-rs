@@ -34,6 +34,10 @@ where
         }
     }
 
+    pub fn best_action(&self) -> Option<A> {
+        self.root.most_visited_child().and_then(|c| c.action)
+    }
+
     /// Execute the MCTS algorithm from the initial state given, with timeout in seconds
     /// After how many milliseconds, the mcts should timeout
     /// TODO: Move this to be more dynamic, and support max-depth timeout
@@ -41,7 +45,7 @@ where
         let start_time = Instant::now();
 
         while start_time.elapsed().as_millis() < timeout {
-            let selected_node = Rc::new(self.root.select(&self.mdp, &self.bandit, &self.next_id));
+            let selected_node = self.root.select(&self.mdp, &self.bandit, &self.next_id);
             if !self.mdp.is_terminal(&selected_node.state) {
                 let child = selected_node.expand(&self.mdp, &self.next_id);
                 let reward = self.simulate(&child);
