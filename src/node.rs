@@ -111,7 +111,6 @@ where
         bandit: &UCB1,
         next_id: &RefCell<usize>,
     ) -> Rc<Self>
-    //  -> Rc<Node<S, A, R>>
     where
         M: MDP<S, A>,
     {
@@ -125,9 +124,9 @@ where
         // children to select to become the next node under scope
         let actions = mdp.get_actions(&self.state);
         let action = bandit.select(&self, actions);
-        return self
-            .get_outcome_child(mdp, &action, &next_id)
-            .select(mdp, bandit, &next_id);
+        let child = self.get_outcome_child(mdp, &action, &next_id);
+
+        return child.select(mdp, bandit, &next_id);
     }
 
     pub(crate) fn expand<M: MDP<S, A>>(
@@ -172,7 +171,7 @@ where
 
         if let Some(parent) = self.parent.upgrade() {
             let self_reward = self.reward.as_ref().unwrap_or(&0.0);
-            parent.back_propagate(reward + self_reward, q_function);
+            parent.back_propagate(reward + 0.99 * self_reward, q_function);
         }
     }
 
