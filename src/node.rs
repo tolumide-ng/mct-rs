@@ -25,7 +25,10 @@ pub struct Node<S, A> {
     pub(crate) children: RefCell<Vec<Rc<Node<S, A>>>>,
 }
 
-impl<S, A: Action> Node<S, A> {
+impl<S, A: Action> Node<S, A>
+where
+    S: Eq + PartialEq,
+{
     pub(crate) fn new(
         state: S,
         id: usize,
@@ -69,15 +72,20 @@ impl<S, A: Action> Node<S, A> {
         // Chose one outcome based on transition probabilities
         let (next_state, reward, _) = mdp.execute(&self.state, action);
 
-        // Find the corresponding state and return if this already exists
+        // If a child already exists for this *resulting state* and action, return it.
         // We do that here by checking if any of the children(node) was a product of the action A
         for child in self.children.borrow().iter() {
-            if let Some(child_action) = child.action {
-                if child_action == *action {
-                    return Rc::clone(child);
-                }
+            if next_state == child.state {
+                return Rc::clone(child);
             }
         }
+        // for child in self.children.borrow().iter() {
+        //     if let Some(child_action) = child.action {
+        //         if child_action == *action {
+        //             return Rc::clone(child);
+        //         }
+        //     }
+        // }
 
         let id = *next_id.borrow();
         *next_id.borrow_mut() += 1;

@@ -22,7 +22,7 @@ impl<M, S, A> MCTS<M, S, A>
 where
     M: MDP<S, A>,
     A: Action,
-    S: Clone,
+    S: Clone + Eq + PartialEq,
 {
     pub fn new(mdp: M) -> Self {
         let state = mdp.get_initial_state();

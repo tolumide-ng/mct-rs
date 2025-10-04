@@ -86,4 +86,46 @@ impl UCB1 {
         let idx = genrand(0, best_actions.len());
         best_actions[idx]
     }
+
+    // const EXPLORATION_CONSTANT: f64 = 1.41421356237;
+
+    // pub(crate) fn select<S, A>(&self, node: &Node<S, A>, actions: Vec<A>) -> A
+    // where
+    //     A: Action,
+    // {
+    //     if let Some(untried) = actions.iter().find(|&action| {
+    //         !node
+    //             .children
+    //             .borrow()
+    //             .iter()
+    //             .any(|c| c.action == Some(*action))
+    //     }) {
+    //         return *untried;
+    //     }
+
+    //     let mut max_actions: Vec<A> = Vec::with_capacity(actions.len());
+    //     let mut max_value = f64::NEG_INFINITY;
+    //     let total_visits = node
+    //         .children
+    //         .borrow()
+    //         .iter()
+    //         .map(|x| *x.visits.borrow())
+    //         .sum::<usize>() as f64;
+
+    //     for child in node.children.borrow().iter() {
+    //         let value = self.get_q_value(&node.id)
+    //             + f64::sqrt(2f64 * f64::ln(total_visits)) / (*child.visits.borrow() as f64);
+
+    //         if value > max_value {
+    //             max_actions = vec![child.action.unwrap()];
+    //             max_value = value;
+    //         } else if value == max_value {
+    //             max_actions.push(child.action.unwrap());
+    //         }
+    //     }
+
+    //     // If there are multiple actions with the highest value, choose one randomly
+    //     let index = genrand(0, max_actions.len());
+    //     return max_actions[index];
+    // }
 }

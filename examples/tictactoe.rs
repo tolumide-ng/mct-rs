@@ -7,7 +7,7 @@ enum Player {
     O,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct TicTacToeState {
     board: [[Option<Player>; 3]; 3],
     current: Player,
