@@ -7,11 +7,8 @@ use crate::{action::Action, mdp::MDP, rand::genrand, ucb1::UCB1};
 
 #[derive(Debug)]
 pub struct Node<S, A> {
-    /// Records the unique node id to distinguish duplicated state
-    // id: u16,
-    /// Records the number of times this node has been visited
-    pub(crate) visits: RefCell<usize>,
     pub(crate) state: S,
+    /// Records the unique node id to distinguish duplicated state
     pub(crate) id: usize,
     /// The action that resulted in this Node(State)
     pub(crate) action: Option<A>,
@@ -22,7 +19,13 @@ pub struct Node<S, A> {
     /// All we just do is compare total actions on this state with the total children (explored children of this node)
     /// If they're the same, we've explored everything, else we haven't, and we just add the missing action(child)
     /// Since each node has `action` we can easily use this to know which action/child has been checked or not
+    /// IF ALL CHILDREN NODES OF THIS NODE ARE VISITED, THIS NODE IS CONSIDERED FULLY EXPANDED, otherwise it's not full expanded
     pub(crate) children: RefCell<Vec<Rc<Node<S, A>>>>,
+    /// Records the number of times this node has been on the backpropagation path
+    /// N(v) - A node is considered visited if it has been evaluated at least once.
+    pub(crate) visits: RefCell<usize>,
+    /// Q(v) - Total simulation reward
+    score: RefCell<f64>,
 }
 
 impl<S, A: Action> Node<S, A>
@@ -44,6 +47,7 @@ where
             reward,
             parent,
             children: RefCell::new(vec![]),
+            score: RefCell::new(0f64),
         }
     }
 
@@ -59,7 +63,16 @@ where
         *self.visits.borrow()
     }
 
-    /// Simulate the outcome of an action, and return the child node
+    pub(crate) fn q_value(&self) -> f64 {
+        let visits = *(self.visits.borrow());
+        if visits == 0 {
+            0.0
+        } else {
+            *self.score.borrow() / (visits as f64)
+        }
+    }
+
+    // /// Simulate the outcome of an action, and return the child node
     pub(crate) fn get_outcome_child<M>(
         self: &Rc<Self>,
         mdp: &M,
@@ -74,9 +87,16 @@ where
 
         // If a child already exists for this *resulting state* and action, return it.
         // We do that here by checking if any of the children(node) was a product of the action A
-        for child in self.children.borrow().iter() {
-            if next_state == child.state {
-                return Rc::clone(child);
+        {
+            let already_exists = self.children.borrow().iter().find_map(|x| {
+                if x.action.is_some_and(|xa| xa == *action) {
+                    return Some(Rc::clone(&x));
+                }
+                None
+            });
+
+            if let Some(action) = already_exists {
+                return action;
             }
         }
         // for child in self.children.borrow().iter() {
@@ -87,9 +107,19 @@ where
         //     }
         // }
 
-        let id = *next_id.borrow();
-        *next_id.borrow_mut() += 1;
+        // for child in self.children.borrow().iter() {
+        //     if next_state == child.state {
+        //         return Rc::clone(child);
+        //     }
+        // }
 
+        // this is likely buggy! Needs to be done in one atomic call
+        let id = {
+            let mut id_ref = next_id.borrow_mut();
+            let id = *id_ref;
+            *id_ref += 1;
+            id
+        };
         // This outcome has not occured from this state-action pair previously
         let new_child = Rc::new(Node::new(
             next_state,
@@ -102,6 +132,19 @@ where
         self.children.borrow_mut().push(Rc::clone(&new_child));
 
         return new_child;
+    }
+
+    /// TODO:  This should be considered as a trait, but a default value just incase the user wants to provide something custom here
+    pub fn ucb1(self: &Rc<Self>, exploration_constant: f64) -> f64 {
+        let parent_visits = if let Some(n) = self.parent.upgrade() {
+            *(n.visits.borrow()) as f64
+        } else {
+            0.0
+        };
+
+        self.q_value()
+            + exploration_constant
+                * (parent_visits.ln() / (*self.visits.borrow() as f64 + 1e-6)).sqrt()
     }
 
     /// Select a node that is not fully expanded
@@ -138,21 +181,23 @@ where
             return Rc::clone(&self);
         }
 
-        // let xx = id.borrow();
-        // *id.borrow_mut() += 1;
+        let expandables = self
+            .children
+            .borrow()
+            .iter()
+            .map(|x| x.action)
+            .collect::<Vec<_>>();
 
+        // let children = self.children.borrow();
         // Randomly select an unexpected action to expand
         let actions = mdp.get_actions(&self.state);
         let actions = actions
             .iter()
             .filter(|a| {
-                let already_executed = self
-                    .children
-                    .borrow()
+                !expandables
                     .iter()
-                    .any(|child| child.action.is_some_and(|ac| ac == **a));
-
-                return !already_executed;
+                    .filter_map(|x| *x)
+                    .any(|action| action == **a)
             })
             .collect::<Vec<_>>();
 
@@ -164,14 +209,15 @@ where
     /// BackPropagate the reward back to the parent node
     pub(crate) fn back_propagate(self: &Rc<Self>, reward: f64, q_function: &mut UCB1) {
         *self.visits.borrow_mut() += 1;
+        *self.score.borrow_mut() += reward;
 
-        let qvalue = q_function.get_q_value(&self.id);
-        let delta = (1f64 / *self.visits.borrow() as f64) * (reward - qvalue);
-        q_function.update(&self, delta);
+        // let qvalue = q_function.get_q_value(&self.id);
+        // let delta = (1f64 / *self.visits.borrow() as f64) * (reward - qvalue);
+        // q_function.update(&self, delta);
 
         if let Some(parent) = self.parent.upgrade() {
-            let self_reward = self.reward.as_ref().unwrap_or(&0.0);
-            parent.back_propagate(reward + 0.99 * self_reward, q_function);
+            // let self_reward = self.reward.as_ref().unwrap_or(&0.0);
+            parent.back_propagate(reward, q_function);
         }
     }
 
