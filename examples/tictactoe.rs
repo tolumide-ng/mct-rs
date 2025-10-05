@@ -1,4 +1,4 @@
-use mct_rs::{action::Action, mcts::MCTS, mdp::MDP};
+use mct_rs::{action::Action, mcts::MCTS, mdp::MDP, strategy::Strategy};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 enum Player {
@@ -157,6 +157,8 @@ fn main() {
     mcts.mcts(100);
 
     // Pick best child from root (most visits)
-    let best_child = mcts.best_action().expect("No children found");
+    let best_child = mcts
+        .best_action(Strategy::Probabilistic)
+        .expect("No children found");
     println!("Best action: {:?}", best_child);
 }

@@ -1,33 +1,17 @@
 use core::f64;
-use std::collections::HashMap;
 
 use crate::action::Action;
 use crate::node::Node;
+use crate::rand::genrand;
 
 /// Given that this node is fully expanded i.e all the direct children of this node have been explored
 /// This method helps us calculate the best child of this node to exploit further
 /// Selects an action for the state from a list given a Q-function(???) (https://gibberblot.github.io/rl-notes/single-agent/multi-armed-bandits.html#id5)
 /// this can be: Softmax strategy, UCB1 e.t.c
 #[derive(Debug, Default)]
-pub struct UCB1 {
-    // TODO: Readup/watch videos on Qfunctions
-    q_table: HashMap<usize, f64>,
-}
+pub struct UCB1;
 
 impl UCB1 {
-    // pub(crate) fn get_q_value(&self, id: &usize) -> f64 {
-    //     *self.q_table.get(id).unwrap_or(&0.0)
-    // }
-
-    // pub(crate) fn update<S, A>(&mut self, state: &Node<S, A>, delta: f64)
-    // where
-    //     A: Action,
-    // {
-    //     // let entry = self.q_table.entry(state.id).or_insert(0.0);
-    //     // *entry += delta
-    //     self.q_table.insert(state.id, delta);
-    // }
-
     const C: f64 = 1.4142135623730951;
 
     pub(crate) fn select<S, A>(&self, node: &Node<S, A>, actions: Vec<A>) -> A
@@ -36,19 +20,38 @@ impl UCB1 {
         S: PartialEq + Eq,
     {
         let children = node.children.borrow();
+        let child_actions = children.iter().flat_map(|c| c.action).collect::<Vec<_>>();
 
-        if let Some(untried) = actions
-            .iter()
-            .find(|&a| !children.iter().any(|c| c.action == Some(*a)))
-        {
-            return *untried;
+        for action in actions.iter() {
+            if !child_actions.contains(action) {
+                return *action;
+            }
         }
 
-        let max = children
-            .iter()
-            .max_by(|a, b| (a.ucb1(Self::C)).total_cmp(&b.ucb1(Self::C)))
-            .unwrap();
+        // if let Some(untried) = actions
+        //     .iter()
+        //     .find(|&a| !children.iter().any(|c| c.action == Some(*a)))
+        // {
+        //     return *untried;
+        // }
 
-        return max.action.unwrap();
+        let mut max_actions = Vec::new();
+        let mut max_value = f64::NEG_INFINITY;
+        // let tol = 1e-9f64;
+
+        for child in children.iter() {
+            let value = child.ucb1(Self::C);
+
+            if value > max_value {
+                max_actions = vec![child.action.unwrap()];
+                max_value = value;
+            } else if value == max_value {
+                max_actions.push(child.action.unwrap());
+            }
+        }
+
+        //  if there are multiple actions with the highest value choose one randomly
+        let index = genrand(0, max_actions.len());
+        return max_actions[index];
     }
 }

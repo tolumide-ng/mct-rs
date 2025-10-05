@@ -12,7 +12,7 @@ pub struct Node<S, A> {
     pub(crate) id: usize,
     /// The action that resulted in this Node(State)
     pub(crate) action: Option<A>,
-    reward: Option<f64>,
+    pub(crate) reward: Option<f64>,
     parent: Weak<Node<S, A>>,
     /// rather than storing stats(time visited for the bandit) in UCB1, we only store children and times visited here
     /// In UCB1 where we need to explore all the actions first before we start exploiting
@@ -87,25 +87,13 @@ where
 
         // If a child already exists for this *resulting state* and action, return it.
         // We do that here by checking if any of the children(node) was a product of the action A
-        {
-            let already_exists = self.children.borrow().iter().find_map(|x| {
-                if x.action.is_some_and(|xa| xa == *action) {
-                    return Some(Rc::clone(&x));
+        for child in self.children.borrow().iter() {
+            if let Some(child_action) = child.action {
+                if child_action == *action {
+                    return Rc::clone(child);
                 }
-                None
-            });
-
-            if let Some(action) = already_exists {
-                return action;
             }
         }
-        // for child in self.children.borrow().iter() {
-        //     if let Some(child_action) = child.action {
-        //         if child_action == *action {
-        //             return Rc::clone(child);
-        //         }
-        //     }
-        // }
 
         // for child in self.children.borrow().iter() {
         //     if next_state == child.state {
@@ -120,6 +108,7 @@ where
             *id_ref += 1;
             id
         };
+
         // This outcome has not occured from this state-action pair previously
         let new_child = Rc::new(Node::new(
             next_state,
@@ -136,15 +125,21 @@ where
 
     /// TODO:  This should be considered as a trait, but a default value just incase the user wants to provide something custom here
     pub fn ucb1(self: &Rc<Self>, exploration_constant: f64) -> f64 {
-        let parent_visits = if let Some(n) = self.parent.upgrade() {
-            *(n.visits.borrow()) as f64
+        let parent_visits = if let Some(parent) = self.parent.upgrade() {
+            *(parent.visits.borrow()) as f64
         } else {
-            0.0
-        };
+            1.0
+        }
+        .max(1f64);
 
-        self.q_value()
-            + exploration_constant
-                * (parent_visits.ln() / (*self.visits.borrow() as f64 + 1e-6)).sqrt()
+        // self.q_value()
+        //     + exploration_constant
+        //         * (parent_visits.ln() / (*self.visits.borrow() as f64 + 1e-6)).sqrt()
+
+        let child_visits = (*self.visits.borrow()).max(1) as f64;
+        self.q_value() + (exploration_constant * (parent_visits.ln() / child_visits).sqrt())
+        // // self.q_value() + (exploration_constant * (parent_visits.ln() / child_visits))
+        // self.q_value() + f64::sqrt((2f64 * parent_visits.ln()) / child_visits)
     }
 
     /// Select a node that is not fully expanded
@@ -167,9 +162,9 @@ where
         // children to select to become the next node under scope
         let actions = mdp.get_actions(&self.state);
         let action = bandit.select(&self, actions);
-        let child = self.get_outcome_child(mdp, &action, &next_id);
-
-        return child.select(mdp, bandit, &next_id);
+        return self
+            .get_outcome_child(mdp, &action, &next_id)
+            .select(mdp, bandit, &next_id);
     }
 
     pub(crate) fn expand<M: MDP<S, A>>(
@@ -181,29 +176,24 @@ where
             return Rc::clone(&self);
         }
 
-        let expandables = self
+        let explored = self
             .children
             .borrow()
             .iter()
-            .map(|x| x.action)
+            .flat_map(|x| x.action)
             .collect::<Vec<_>>();
 
         // let children = self.children.borrow();
         // Randomly select an unexpected action to expand
         let actions = mdp.get_actions(&self.state);
-        let actions = actions
+        let expandable_actions = actions
             .iter()
-            .filter(|a| {
-                !expandables
-                    .iter()
-                    .filter_map(|x| *x)
-                    .any(|action| action == **a)
-            })
+            .filter(|a| !explored.contains(a))
             .collect::<Vec<_>>();
 
-        let index = genrand(0, actions.len());
-        let action = actions[index];
-        return self.get_outcome_child(mdp, action, next_id);
+        let index = genrand(0, expandable_actions.len());
+        let action = expandable_actions[index];
+        return self.get_outcome_child(mdp, &action, next_id);
     }
 
     /// BackPropagate the reward back to the parent node
@@ -217,19 +207,30 @@ where
 
         if let Some(parent) = self.parent.upgrade() {
             // let self_reward = self.reward.as_ref().unwrap_or(&0.0);
+            // parent.back_propagate(-reward, q_function);
             parent.back_propagate(reward, q_function);
         }
     }
 
     /// Returns true if and only if all child actions have been expanded
     fn is_full_expanded<M: MDP<S, A>>(&self, mdp: &M) -> bool {
-        mdp.get_actions(&self.state).iter().all(|a| {
-            self.children
-                .borrow()
-                .iter()
-                .find(|c| c.action.is_some_and(|ca| ca == *a))
-                .is_some()
-        })
+        let actions = mdp.get_actions(&self.state);
+        let explored = self
+            .children
+            .borrow()
+            .iter()
+            .flat_map(|c| c.action)
+            .collect::<Vec<_>>();
+
+        return actions.len() == explored.len();
+
+        // mdp.get_actions(&self.state).iter().all(|a| {
+        //     self.children
+        //         .borrow()
+        //         .iter()
+        //         .find(|c| c.action.is_some_and(|ca| ca == *a))
+        //         .is_some()
+        // })
     }
 }
 
