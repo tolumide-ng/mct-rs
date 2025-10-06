@@ -1,7 +1,6 @@
 use core::f64;
 use std::{
     cell::RefCell,
-    fmt::Debug,
     rc::{Rc, Weak},
     time::Instant,
 };
@@ -24,7 +23,7 @@ impl<M, S, A> MCTS<M, S, A>
 where
     M: MDP<S, A>,
     A: Action,
-    S: Clone + Eq + PartialEq + Debug,
+    S: Clone + Eq + PartialEq,
 {
     pub fn new(mdp: M) -> Self {
         let state = mdp.get_initial_state();
@@ -49,7 +48,6 @@ where
             if !self.mdp.is_terminal(&selected_node.state) {
                 let child = selected_node.expand(&self.mdp, &self.next_id);
                 let reward = self.simulate(&child, start_time, timeout);
-                // println!("received and proceeding with {} ", reward);
                 child.back_propagate(reward, &mut self.bandit);
             }
         }
@@ -89,8 +87,6 @@ where
             // Execute the action
             let (next_state, reward, ..) = self.mdp.execute(&state, action);
 
-            // println!("the next S{}");
-
             // Discount the reward
             cumulative_reward += f64::powi(self.mdp.get_discount_factor(), depth) * reward;
             // cumulative_reward += reward;
@@ -103,20 +99,6 @@ where
         if !self.mdp.is_terminal(&state) {
             cumulative_reward += self.heuristic_eval(&state);
         }
-
-        // if self.mdp.is_terminal(&state) {
-        //     cumulative_reward = r;
-        // }
-
-        *node.visits.borrow_mut() += 1;
-
-        // root: Rc::new(Node::new(state, 0, None, None, Weak::new())),
-        // let preview: Node<S, A> = Node::new(state, 1, None, None, Weak::new());
-
-        // println!(
-        //     "the result for simulate here is >>>> {:?} {:?} \n\n",
-        //     cumulative_reward, preview
-        // );
 
         return cumulative_reward;
     }

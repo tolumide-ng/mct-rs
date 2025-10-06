@@ -3,24 +3,28 @@ use mct_rs::{action::Action, mcts::MCTS, mdp::MDP, strategy::Strategy};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 enum Player {
     #[default]
-    X,
     O,
+    X,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct TicTacToeState {
+pub(crate) struct TicTacToeState {
     board: [[Option<Player>; 3]; 3],
     current: Player,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TicTacToeAction {
+pub(crate) enum TicTacToeAction {
     Pos(usize, usize),
 }
 
 impl Action for TicTacToeAction {}
 
-struct TicTacToeMDP;
+#[derive(Debug, Default)]
+pub(crate) struct TicTacToeMDP {
+    player: Player,
+    state: TicTacToeState,
+}
 
 impl TicTacToeMDP {
     fn get_winner(&self, state: &TicTacToeState) -> Option<Player> {
@@ -123,14 +127,14 @@ impl MDP<TicTacToeState, TicTacToeAction> for TicTacToeMDP {
 
     fn get_reward(
         &self,
-        state: &TicTacToeState,
+        _state: &TicTacToeState,
         _action: &TicTacToeAction,
         next_state: &TicTacToeState,
     ) -> f64 {
         match self.get_winner(next_state) {
-            Some(p) if p == state.current => 1.0, // current player wins
-            Some(_) => -1.0,                      // current player loses
-            None => 0.0,                          // draw or ongoing
+            Some(p) if p == self.player => 1.0, // current player wins
+            Some(_) => -1.0,                    // current player loses
+            None => 0.0,                        // draw or ongoing
         }
     }
 
@@ -150,12 +154,16 @@ impl MDP<TicTacToeState, TicTacToeAction> for TicTacToeMDP {
 }
 
 fn main() {
-    let mdp = TicTacToeMDP;
+    let mdp = TicTacToeMDP::default();
     let mut mcts = MCTS::new(mdp);
+
+    // The player from whom's perspective we want to run MCTS
 
     // Run MCTS for 100ms
     mcts.mcts(100);
 
+    // this would return the best possible move from the perspective of mdp.player
+    // if you need to check the best move for a different player X, change player to X in mdp, and test from it's perspective.
     // Pick best child from root (most visits)
     let best_child = mcts
         .best_action(Strategy::Probabilistic)
