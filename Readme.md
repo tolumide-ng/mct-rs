@@ -7,6 +7,6 @@ MCT-RS: A fast, flexible MCTS(Monte Carlo Tree Search) library for Rust
 
 
 ### Future Plans
-1. Allow users provide their own dynamic Multi-armed bandit implementations
-2. Allow reward to be a trait to be dynamically used by others (must implement From<f64>, Into<f64>)
-3. Provide documentation
+1. [x] Allow users provide their own dynamic Multi-armed bandit implementations
+2. [ ] Allow reward to be a trait to be dynamically used by others (must implement From<f64>, Into<f64>)
+3. [ ] Provide documentation

@@ -3,16 +3,17 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{action::Action, mdp::MDP, rand::genrand, ucb1::UCB1};
+use crate::{action::Action, mdp::MDP, policy::RolloutPolicy, rand::genrand, ucb1::UCB1};
 
 #[derive(Debug)]
 pub struct Node<S, A> {
-    pub(crate) state: S,
+    pub state: S,
     /// Records the unique node id to distinguish duplicated state
     pub(crate) id: usize,
     /// The action that resulted in this Node(State)
+    // pub(crate) action: Option<A>,
     pub(crate) action: Option<A>,
-    pub(crate) reward: Option<f64>,
+    // pub reward: Option<f64>,
     parent: Weak<Node<S, A>>,
     /// rather than storing stats(time visited for the bandit) in UCB1, we only store children and times visited here
     /// In UCB1 where we need to explore all the actions first before we start exploiting
@@ -20,12 +21,14 @@ pub struct Node<S, A> {
     /// If they're the same, we've explored everything, else we haven't, and we just add the missing action(child)
     /// Since each node has `action` we can easily use this to know which action/child has been checked or not
     /// IF ALL CHILDREN NODES OF THIS NODE ARE VISITED, THIS NODE IS CONSIDERED FULLY EXPANDED, otherwise it's not full expanded
+    // pub(crate) children: RefCell<Vec<Rc<Node<S, A>>>>,
     pub(crate) children: RefCell<Vec<Rc<Node<S, A>>>>,
     /// Records the number of times this node has been on the backpropagation path
     /// N(v) - A node is considered visited if it has been evaluated at least once.
     pub(crate) visits: RefCell<usize>,
     /// Q(v) - Total simulation reward
-    score: RefCell<f64>,
+    // pub(crate) score: RefCell<f64>,
+    pub(crate) score: RefCell<f64>,
 }
 
 impl<S, A: Action> Node<S, A>
@@ -36,7 +39,7 @@ where
         state: S,
         id: usize,
         action: Option<A>,
-        reward: Option<f64>,
+        score: Option<f64>,
         parent: Weak<Node<S, A>>,
     ) -> Self {
         Self {
@@ -44,10 +47,10 @@ where
             visits: RefCell::new(0),
             state,
             action,
-            reward,
+            score: RefCell::new(score.unwrap_or(0.0)),
             parent,
             children: RefCell::new(vec![]),
-            score: RefCell::new(0f64),
+            // score: RefCell::new(0f64),
         }
     }
 
@@ -138,7 +141,7 @@ where
 
         let child_visits = (*self.visits.borrow()).max(1) as f64;
         self.q_value() + (exploration_constant * (parent_visits.ln() / child_visits).sqrt())
-        // // self.q_value() + (exploration_constant * (parent_visits.ln() / child_visits))
+        // self.q_value() + (exploration_constant * (parent_visits.ln() / child_visits))
         // self.q_value() + f64::sqrt((2f64 * parent_visits.ln()) / child_visits)
     }
 
@@ -167,11 +170,16 @@ where
             .select(mdp, bandit, &next_id);
     }
 
-    pub(crate) fn expand<M: MDP<S, A>>(
+    pub(crate) fn expand<M, P>(
         self: &Rc<Self>,
         mdp: &M,
+        policy: &P,
         next_id: &RefCell<usize>,
-    ) -> Rc<Self> {
+    ) -> Rc<Self>
+    where
+        M: MDP<S, A>,
+        P: RolloutPolicy<M, S, A>,
+    {
         if mdp.is_terminal(&self.state) {
             return Rc::clone(&self);
         }
@@ -187,12 +195,14 @@ where
         // Randomly select an unexpected action to expand
         let actions = mdp.get_actions(&self.state);
         let expandable_actions = actions
-            .iter()
+            .into_iter()
             .filter(|a| !explored.contains(a))
             .collect::<Vec<_>>();
 
-        let index = genrand(0, expandable_actions.len());
-        let action = expandable_actions[index];
+        // let index = genrand(0, expandable_actions.len());
+        let action = policy.pick(&self.state, &expandable_actions);
+        // let action = expandable_actions[index];
+
         return self.get_outcome_child(mdp, &action, next_id);
     }
 
@@ -236,6 +246,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::policy::RandomRollout;
+
     use super::*;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -348,14 +360,18 @@ mod tests {
         let node = Rc::new(Node::new(0, 1, None, None, Weak::new()));
         let mdp = DummyMDP;
         let next_id = RefCell::new(2);
+        let policy = RandomRollout::new();
 
         assert_eq!(node.children.borrow().len(), 0);
 
-        let child = node.expand(&mdp, &next_id);
+        let child = node.expand(&mdp, &policy, &next_id);
 
         assert_eq!(node.children.borrow().len(), 1);
         assert_eq!(node.children.borrow()[0].id, child.id);
-        assert_eq!(node.children.borrow()[0].reward, child.reward);
+        assert_eq!(
+            *node.children.borrow()[0].score.borrow(),
+            *child.score.borrow()
+        );
         assert_eq!(node.children.borrow()[0].state, child.state);
         assert_eq!(node.children.borrow()[0].visits, child.visits);
     }
@@ -365,8 +381,9 @@ mod tests {
         let node = Rc::new(Node::new(10, 1, None, None, Weak::new())); // terminal state
         let mdp = DummyMDP;
         let next_id = RefCell::new(2);
+        let policy = RandomRollout::new();
 
-        let child = node.expand(&mdp, &next_id);
+        let child = node.expand(&mdp, &policy, &next_id);
 
         assert!(Rc::ptr_eq(&node, &child));
     }
@@ -421,7 +438,10 @@ mod tests {
         assert_eq!(root.children.borrow().len(), 2);
 
         assert_eq!(root.children.borrow()[0].id, selected.id);
-        assert_eq!(root.children.borrow()[0].reward, selected.reward);
+        assert_eq!(
+            *root.children.borrow()[0].score.borrow(),
+            *selected.score.borrow()
+        );
         assert_eq!(root.children.borrow()[0].state, selected.state);
         assert_eq!(root.children.borrow()[0].visits, selected.visits);
     }

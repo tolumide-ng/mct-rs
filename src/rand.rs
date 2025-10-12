@@ -1,7 +1,10 @@
 use getrandom::getrandom;
 
-pub(crate) fn genrand(min: usize, max: usize) -> usize {
-    assert!(min < max, "min must be less than max");
+pub fn genrand(min: usize, max: usize) -> usize {
+    assert!(
+        min < max,
+        "min must be less than max. min={min} -> max={max}"
+    );
     let range = max - min;
     let mut buf = [0u8; std::mem::size_of::<usize>()];
 

@@ -1,37 +1,45 @@
 use core::f64;
 use std::{
     cell::RefCell,
+    fmt::Display,
     rc::{Rc, Weak},
     time::Instant,
 };
 
-use crate::{action::Action, mdp::MDP, node::Node, rand::genrand, strategy::Strategy, ucb1::UCB1};
+use crate::{
+    action::Action, mdp::MDP, node::Node, policy::RolloutPolicy, rand::genrand, strategy::Strategy,
+    ucb1::UCB1,
+};
 
-pub struct MCTS<M, S, A>
+pub struct MCTS<M, S, A, P>
 where
     M: MDP<S, A>,
     A: Action,
     S: Clone,
+    P: RolloutPolicy<M, S, A>,
 {
     mdp: M,
     root: Rc<Node<S, A>>,
     next_id: RefCell<usize>,
     bandit: UCB1,
+    policy: P,
 }
 
-impl<M, S, A> MCTS<M, S, A>
+impl<M, S, A, P> MCTS<M, S, A, P>
 where
     M: MDP<S, A>,
     A: Action,
     S: Clone + Eq + PartialEq,
+    P: RolloutPolicy<M, S, A>,
 {
-    pub fn new(mdp: M) -> Self {
+    pub fn new(mdp: M, policy: P) -> Self {
         let state = mdp.get_initial_state();
         Self {
             root: Rc::new(Node::new(state, 0, None, None, Weak::new())),
             next_id: RefCell::new(1),
             mdp,
             bandit: UCB1::default(),
+            policy,
         }
     }
 
@@ -44,23 +52,13 @@ where
         while start_time.elapsed().as_millis() < timeout {
             // Find a state node to expand
             let selected_node = self.root.select(&self.mdp, &self.bandit, &self.next_id);
-
+            // let xx = !self.mdp.is_terminal(&selected_node.state);
             if !self.mdp.is_terminal(&selected_node.state) {
-                let child = selected_node.expand(&self.mdp, &self.next_id);
+                let child = selected_node.expand(&self.mdp, &self.policy, &self.next_id);
                 let reward = self.simulate(&child, start_time, timeout);
                 child.back_propagate(reward, &mut self.bandit);
             }
         }
-    }
-
-    fn choose(&self, state: &S) -> A {
-        let actions = self.mdp.get_actions(state);
-        if actions.len() == 1 {
-            return actions[0];
-        }
-
-        let index = genrand(0, actions.len());
-        return actions[index];
     }
 
     /// TODO: This would eventually be moved to a trait that must be implemented on state!, this MCTS or whatever!
@@ -77,35 +75,32 @@ where
     ) -> f64 {
         let mut state = node.state.clone();
         let mut cumulative_reward = 0.0;
-        let mut depth = 0;
+        // let mut depth = 0;
 
-        // let mut r = 0.0;
         while !self.mdp.is_terminal(&state) && start_time.elapsed().as_millis() < timeout {
+            let actions = self.mdp.get_actions(&state);
+
             // Choose an action to execute
-            let action = &self.choose(&state);
+            let action = self.policy.pick(&state, &actions);
 
             // Execute the action
-            let (next_state, reward, ..) = self.mdp.execute(&state, action);
+            let (next_state, reward, ..) = self.mdp.execute(&state, &action);
 
             // Discount the reward
-            cumulative_reward += f64::powi(self.mdp.get_discount_factor(), depth) * reward;
-            // cumulative_reward += reward;
-            depth += 1;
-            // r = reward;
+            // cumulative_reward += f64::powi(self.mdp.get_discount_factor(), depth) * reward;
+            cumulative_reward += reward;
+            // depth += 1;
 
             state = next_state;
         }
 
         if !self.mdp.is_terminal(&state) {
+            // todo! this needs to be a trait
             cumulative_reward += self.heuristic_eval(&state);
         }
 
         return cumulative_reward;
     }
-
-    // pub fn best_action(&self) -> Option<A> {
-    //     self.root.most_visited_child().and_then(|c| c.action)
-    // }
 
     pub fn best_action(&self, strategy: Strategy) -> Option<A> {
         let root = &self.root;
@@ -164,11 +159,11 @@ where
                     let q = child.q_value();
 
                     // if child is terminal with positive reward (win)
-                    if let Some(reward) = child.reward {
-                        if reward > 0.0 {
-                            winning_mvs.push(child);
-                            continue;
-                        }
+                    // if let Some(reward) = child.score.borrow() {}
+
+                    if *child.score.borrow() > 0.0 {
+                        winning_mvs.push(child);
+                        continue;
                     }
 
                     if q > bestq {

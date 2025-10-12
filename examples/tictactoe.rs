@@ -1,4 +1,4 @@
-use mct_rs::{action::Action, mcts::MCTS, mdp::MDP, strategy::Strategy};
+use mct_rs::{action::Action, mcts::MCTS, mdp::MDP, policy::RandomRollout, strategy::Strategy};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 enum Player {
@@ -155,7 +155,7 @@ impl MDP<TicTacToeState, TicTacToeAction> for TicTacToeMDP {
 
 fn main() {
     let mdp = TicTacToeMDP::default();
-    let mut mcts = MCTS::new(mdp);
+    let mut mcts = MCTS::new(mdp, RandomRollout::new());
 
     // The player from whom's perspective we want to run MCTS
 

@@ -28,16 +28,8 @@ impl UCB1 {
             }
         }
 
-        // if let Some(untried) = actions
-        //     .iter()
-        //     .find(|&a| !children.iter().any(|c| c.action == Some(*a)))
-        // {
-        //     return *untried;
-        // }
-
         let mut max_actions = Vec::new();
         let mut max_value = f64::NEG_INFINITY;
-        // let tol = 1e-9f64;
 
         for child in children.iter() {
             let value = child.ucb1(Self::C);
