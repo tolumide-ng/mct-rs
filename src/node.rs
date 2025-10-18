@@ -3,13 +3,11 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{action::Action, mdp::MDP, policy::RolloutPolicy, rand::genrand, ucb1::UCB1};
+use crate::{action::Action, mdp::MDP, policy::RolloutPolicy, ucb1::UCB1};
 
 #[derive(Debug)]
 pub struct Node<S, A> {
     pub state: S,
-    /// Records the unique node id to distinguish duplicated state
-    pub(crate) id: usize,
     /// The action that resulted in this Node(State)
     // pub(crate) action: Option<A>,
     pub(crate) action: Option<A>,
@@ -37,13 +35,11 @@ where
 {
     pub(crate) fn new(
         state: S,
-        id: usize,
         action: Option<A>,
         score: Option<f64>,
         parent: Weak<Node<S, A>>,
     ) -> Self {
         Self {
-            id,
             visits: RefCell::new(0),
             state,
             action,
@@ -52,18 +48,6 @@ where
             children: RefCell::new(vec![]),
             // score: RefCell::new(0f64),
         }
-    }
-
-    pub fn most_visited_child(&self) -> Option<Rc<Node<S, A>>> {
-        self.children
-            .borrow()
-            .iter()
-            .max_by_key(|c| *c.visits.borrow())
-            .map(Rc::clone)
-    }
-
-    pub fn visits(&self) -> usize {
-        *self.visits.borrow()
     }
 
     pub(crate) fn q_value(&self) -> f64 {
@@ -76,12 +60,7 @@ where
     }
 
     // /// Simulate the outcome of an action, and return the child node
-    pub(crate) fn get_outcome_child<M>(
-        self: &Rc<Self>,
-        mdp: &M,
-        action: &A,
-        next_id: &RefCell<usize>,
-    ) -> Rc<Node<S, A>>
+    pub(crate) fn get_outcome_child<M>(self: &Rc<Self>, mdp: &M, action: &A) -> Rc<Node<S, A>>
     where
         M: MDP<S, A>,
     {
@@ -104,18 +83,9 @@ where
         //     }
         // }
 
-        // this is likely buggy! Needs to be done in one atomic call
-        let id = {
-            let mut id_ref = next_id.borrow_mut();
-            let id = *id_ref;
-            *id_ref += 1;
-            id
-        };
-
         // This outcome has not occured from this state-action pair previously
         let new_child = Rc::new(Node::new(
             next_state,
-            id,
             Some(*action),
             Some(reward),
             Rc::downgrade(self),
@@ -146,12 +116,7 @@ where
     }
 
     /// Select a node that is not fully expanded
-    pub(crate) fn select<M>(
-        self: &Rc<Self>,
-        mdp: &M,
-        bandit: &UCB1,
-        next_id: &RefCell<usize>,
-    ) -> Rc<Self>
+    pub(crate) fn select<M>(self: &Rc<Self>, mdp: &M, bandit: &UCB1) -> Rc<Self>
     where
         M: MDP<S, A>,
     {
@@ -165,17 +130,10 @@ where
         // children to select to become the next node under scope
         let actions = mdp.get_actions(&self.state);
         let action = bandit.select(&self, actions);
-        return self
-            .get_outcome_child(mdp, &action, &next_id)
-            .select(mdp, bandit, &next_id);
+        return self.get_outcome_child(mdp, &action).select(mdp, bandit);
     }
 
-    pub(crate) fn expand<M, P>(
-        self: &Rc<Self>,
-        mdp: &M,
-        policy: &P,
-        next_id: &RefCell<usize>,
-    ) -> Rc<Self>
+    pub(crate) fn expand<M, P>(self: &Rc<Self>, mdp: &M, policy: &P) -> Rc<Self>
     where
         M: MDP<S, A>,
         P: RolloutPolicy<M, S, A>,
@@ -203,7 +161,7 @@ where
         let action = policy.pick(&self.state, &expandable_actions);
         // let action = expandable_actions[index];
 
-        return self.get_outcome_child(mdp, &action, next_id);
+        return self.get_outcome_child(mdp, &action);
     }
 
     /// BackPropagate the reward back to the parent node
@@ -211,13 +169,7 @@ where
         *self.visits.borrow_mut() += 1;
         *self.score.borrow_mut() += reward;
 
-        // let qvalue = q_function.get_q_value(&self.id);
-        // let delta = (1f64 / *self.visits.borrow() as f64) * (reward - qvalue);
-        // q_function.update(&self, delta);
-
         if let Some(parent) = self.parent.upgrade() {
-            // let self_reward = self.reward.as_ref().unwrap_or(&0.0);
-            // parent.back_propagate(-reward, q_function);
             parent.back_propagate(reward, q_function);
         }
     }
@@ -233,14 +185,6 @@ where
             .collect::<Vec<_>>();
 
         return actions.len() == explored.len();
-
-        // mdp.get_actions(&self.state).iter().all(|a| {
-        //     self.children
-        //         .borrow()
-        //         .iter()
-        //         .find(|c| c.action.is_some_and(|ca| ca == *a))
-        //         .is_some()
-        // })
     }
 }
 
@@ -306,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_node_new() {
-        let node: Node<u32, TestAction> = Node::new(0, 1, None, None, Weak::new());
+        let node: Node<u32, TestAction> = Node::new(0, None, None, Weak::new());
         assert_eq!(*node.visits.borrow(), 0);
         assert_eq!(node.state, 0);
         assert!(node.action.is_none());
@@ -315,26 +259,23 @@ mod tests {
 
     #[test]
     fn test_get_outcome_child_adds_new_child() {
-        let root = Rc::new(Node::new(0, 1, None, None, Weak::new()));
-        let next_id = RefCell::new(2);
+        let root = Rc::new(Node::new(0, None, None, Weak::new()));
         let mdp = DummyMDP;
 
-        let child = root.get_outcome_child(&mdp, &TestAction::A, &next_id);
+        let child = root.get_outcome_child(&mdp, &TestAction::A);
 
         assert_eq!(root.children.borrow().len(), 1);
         assert_eq!(child.state, 1); // 0 + 1
-        assert_eq!(next_id.borrow().clone(), 3);
         assert!(Rc::ptr_eq(&child.parent.upgrade().unwrap(), &root));
     }
 
     #[test]
     fn test_get_outcome_child_returns_existing_child() {
-        let root = Rc::new(Node::new(0, 1, None, None, Weak::new()));
-        let next_id = RefCell::new(2);
+        let root = Rc::new(Node::new(0, None, None, Weak::new()));
         let mdp = DummyMDP;
 
-        let child1 = root.get_outcome_child(&mdp, &TestAction::A, &next_id);
-        let child2 = root.get_outcome_child(&mdp, &TestAction::A, &next_id);
+        let child1 = root.get_outcome_child(&mdp, &TestAction::A);
+        let child2 = root.get_outcome_child(&mdp, &TestAction::A);
 
         assert!(Rc::ptr_eq(&child1, &child2));
         assert_eq!(root.children.borrow().len(), 1);
@@ -342,32 +283,29 @@ mod tests {
 
     #[test]
     fn test_is_full_expanded() {
-        let node = Rc::new(Node::new(0, 1, None, None, Weak::new()));
+        let node = Rc::new(Node::new(0, None, None, Weak::new()));
         let mdp = DummyMDP;
 
         assert!(!node.is_full_expanded(&mdp));
 
         // Expand all actions
-        let next_id = RefCell::new(2);
-        node.get_outcome_child(&mdp, &TestAction::A, &next_id);
-        node.get_outcome_child(&mdp, &TestAction::B, &next_id);
+        node.get_outcome_child(&mdp, &TestAction::A);
+        node.get_outcome_child(&mdp, &TestAction::B);
 
         assert!(node.is_full_expanded(&mdp));
     }
 
     #[test]
     fn test_expand_adds_one_child() {
-        let node = Rc::new(Node::new(0, 1, None, None, Weak::new()));
+        let node = Rc::new(Node::new(0, None, None, Weak::new()));
         let mdp = DummyMDP;
-        let next_id = RefCell::new(2);
         let policy = RandomRollout::new();
 
         assert_eq!(node.children.borrow().len(), 0);
 
-        let child = node.expand(&mdp, &policy, &next_id);
+        let child = node.expand(&mdp, &policy);
 
         assert_eq!(node.children.borrow().len(), 1);
-        assert_eq!(node.children.borrow()[0].id, child.id);
         assert_eq!(
             *node.children.borrow()[0].score.borrow(),
             *child.score.borrow()
@@ -378,22 +316,20 @@ mod tests {
 
     #[test]
     fn test_expand_terminal_returns_self() {
-        let node = Rc::new(Node::new(10, 1, None, None, Weak::new())); // terminal state
+        let node = Rc::new(Node::new(10, None, None, Weak::new())); // terminal state
         let mdp = DummyMDP;
-        let next_id = RefCell::new(2);
         let policy = RandomRollout::new();
 
-        let child = node.expand(&mdp, &policy, &next_id);
+        let child = node.expand(&mdp, &policy);
 
         assert!(Rc::ptr_eq(&node, &child));
     }
 
     #[test]
     fn test_back_propagate_increments_visits() {
-        let root = Rc::new(Node::new(0, 1, None, None, Weak::new()));
+        let root = Rc::new(Node::new(0, None, None, Weak::new()));
         let child = Rc::new(Node::new(
             1,
-            2,
             Some(TestAction::A),
             Some(1.0),
             Rc::downgrade(&root),
@@ -409,35 +345,31 @@ mod tests {
 
     #[test]
     fn test_select_returns_terminal_node() {
-        let root = Rc::new(Node::new(10, 1, None, None, Weak::new())); // terminal state
+        let root = Rc::new(Node::new(10, None, None, Weak::new())); // terminal state
         let mdp = DummyMDP;
         let bandit = UCB1::default();
-        let next_id = RefCell::new(2);
 
-        let selected = root.select(&mdp, &bandit, &next_id);
-
+        let selected = root.select(&mdp, &bandit);
         assert!(Rc::ptr_eq(&selected, &root));
     }
 
     #[test]
     fn test_select_traverses_fully_expanded() {
-        let root = Rc::new(Node::new(0, 1, None, None, Weak::new()));
+        let root = Rc::new(Node::new(0, None, None, Weak::new()));
         let mdp = DummyMDP;
         let bandit = UCB1::default();
-        let next_id = RefCell::new(2);
 
         // Expand both actions
-        root.get_outcome_child(&mdp, &TestAction::A, &next_id);
-        root.get_outcome_child(&mdp, &TestAction::B, &next_id);
+        root.get_outcome_child(&mdp, &TestAction::A);
+        root.get_outcome_child(&mdp, &TestAction::B);
 
-        let selected = root.select(&mdp, &bandit, &next_id);
+        let selected = root.select(&mdp, &bandit);
 
         // Should return one of the children
         // assert!(root.children.borrow().contains(&selected));
 
         assert_eq!(root.children.borrow().len(), 2);
 
-        assert_eq!(root.children.borrow()[0].id, selected.id);
         assert_eq!(
             *root.children.borrow()[0].score.borrow(),
             *selected.score.borrow()

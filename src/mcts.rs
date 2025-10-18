@@ -1,7 +1,5 @@
 use core::f64;
 use std::{
-    cell::RefCell,
-    fmt::Display,
     rc::{Rc, Weak},
     time::Instant,
 };
@@ -20,7 +18,6 @@ where
 {
     mdp: M,
     root: Rc<Node<S, A>>,
-    next_id: RefCell<usize>,
     bandit: UCB1,
     policy: P,
 }
@@ -35,8 +32,7 @@ where
     pub fn new(mdp: M, policy: P) -> Self {
         let state = mdp.get_initial_state();
         Self {
-            root: Rc::new(Node::new(state, 0, None, None, Weak::new())),
-            next_id: RefCell::new(1),
+            root: Rc::new(Node::new(state, None, None, Weak::new())),
             mdp,
             bandit: UCB1::default(),
             policy,
@@ -51,10 +47,10 @@ where
 
         while start_time.elapsed().as_millis() < timeout {
             // Find a state node to expand
-            let selected_node = self.root.select(&self.mdp, &self.bandit, &self.next_id);
+            let selected_node = self.root.select(&self.mdp, &self.bandit);
             // let xx = !self.mdp.is_terminal(&selected_node.state);
             if !self.mdp.is_terminal(&selected_node.state) {
-                let child = selected_node.expand(&self.mdp, &self.policy, &self.next_id);
+                let child = selected_node.expand(&self.mdp, &self.policy);
                 let reward = self.simulate(&child, start_time, timeout);
                 child.back_propagate(reward, &mut self.bandit);
             }
