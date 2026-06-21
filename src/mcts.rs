@@ -128,7 +128,7 @@ where
                 let maxq = qvalues.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
                 // subtract maxq for numerical stability
-                let expq: Vec<f64> = qvalues.iter().map(|q| ((q - maxq).exp())).collect();
+                let expq: Vec<f64> = qvalues.iter().map(|q| (q - maxq).exp()).collect();
                 let sum = expq.iter().sum::<f64>().max(f64::MIN_POSITIVE);
 
                 let probs = expq.iter().map(|x| x / sum).collect::<Vec<_>>();

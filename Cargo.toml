@@ -1,6 +1,6 @@
 [package]
 name = "mct-rs"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 authors = ["Tolumide Shopein <tolumideshopein@gmail.com>"]
 keywords = ["ai", "mcts", "mctrs", "monte", "carlo"]
@@ -9,6 +9,10 @@ description = "A fast, flexible, and simple implementation of Monte Carlo Tree S
 license = "MIT OR Apache-2.0"
 publish = true
 repository = "https://github.com/tolumide-ng/mct-rs"
+exclude = ["examples"]
+
+uniffi = ["dep:uniffi"]
 
 [dependencies]
 getrandom = { version = "0.2", features = ["js"] }
+uniffi = { version = "0.31.2", optional = true }
